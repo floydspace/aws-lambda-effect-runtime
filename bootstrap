@@ -1,0 +1,3 @@
+#! /bin/sh
+
+exec /opt/node-v22.14.0-linux-x64/bin/node /opt/runtime.js

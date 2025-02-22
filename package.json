@@ -1,0 +1,20 @@
+{
+  "name": "aws-lambda-effect-runtime",
+  "version": "0.0.0",
+  "description": "Effect runtime for AWS Lambda",
+  "type": "module",
+  "dependencies": {
+    "@effect-aws/lambda": "^1.2.1",
+    "effect": "^3.10.16"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "esbuild": "0.25.0"
+  },
+  "scripts": {
+    "compile": "esbuild --bundle --format=esm --platform=node --target=node22 --outdir=build runtime.ts",
+    "build-layer": "rm -rf dist && pnpm compile && sh scripts/build-layer.sh",
+    "publish-layer": "sh scripts/publish-layer.sh"
+  },
+  "packageManager": "pnpm@9.15.4"
+}

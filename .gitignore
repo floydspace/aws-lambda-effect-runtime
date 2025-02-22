@@ -1,0 +1,8 @@
+.DS_Store
+.direnv/
+.serverless/
+node_modules/
+effect-runtime-lambda-layer/
+*.zip
+/build
+/dist/
