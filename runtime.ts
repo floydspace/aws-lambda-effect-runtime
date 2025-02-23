@@ -23,16 +23,23 @@ function env(name: string, fallback?: string): string {
   return value;
 }
 
-const runtimeUrl = new URL(`http://${env("AWS_LAMBDA_RUNTIME_API")}/2018-06-01/`);
+const runtimeUrl = new URL(
+  `http://${env("AWS_LAMBDA_RUNTIME_API")}/2018-06-01/`
+);
 
-async function fetch(url: string, options?: RequestInit): ReturnType<typeof globalThis.fetch> {
+async function fetch(
+  url: string,
+  options?: RequestInit
+): ReturnType<typeof globalThis.fetch> {
   const { href } = new URL(url, runtimeUrl);
   const response = await globalThis.fetch(href, {
     ...options,
     timeout: false,
-  });
+  } as any);
   if (!response.ok) {
-    exit(`Runtime failed to send request to Lambda [status: ${response.status}]`);
+    exit(
+      `Runtime failed to send request to Lambda [status: ${response.status}]`
+    );
   }
   return response;
 }
@@ -48,7 +55,9 @@ function formatError(error: unknown): LambdaError {
     return {
       errorType: error.name,
       errorMessage: error.message,
-      stackTrace: error.stack?.split("\n").filter((line) => !line.includes(" /opt/runtime.ts")),
+      stackTrace: error.stack
+        ?.split("\n")
+        .filter((line) => !line.includes(" /opt/runtime.ts")),
     };
   }
   return {
@@ -59,14 +68,19 @@ function formatError(error: unknown): LambdaError {
 
 async function sendError(type: string, cause: unknown): Promise<void> {
   console.error(cause);
-  await fetch(requestId === undefined ? "runtime/init/error" : `runtime/invocation/${requestId}/error`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/vnd.aws.lambda.error+json",
-      "Lambda-Runtime-Function-Error-Type": `EffectRuntime.${type}`,
-    },
-    body: JSON.stringify(formatError(cause)),
-  });
+  await fetch(
+    requestId === undefined
+      ? "runtime/init/error"
+      : `runtime/invocation/${requestId}/error`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/vnd.aws.lambda.error+json",
+        "Lambda-Runtime-Function-Error-Type": `EffectRuntime.${type}`,
+      },
+      body: JSON.stringify(formatError(cause)),
+    }
+  );
 }
 
 async function throwError(type: string, cause: unknown): Promise<never> {
@@ -74,7 +88,9 @@ async function throwError(type: string, cause: unknown): Promise<never> {
   exit();
 }
 
-async function init(): Promise<[EffectHandler<any, never, never, any>, Layer.Layer<any, any> | undefined]> {
+async function init(): Promise<
+  [EffectHandler<any, never, never, any>, Layer.Layer<any, any> | undefined]
+> {
   const handlerName = env("_HANDLER");
   const index = handlerName.lastIndexOf(".");
   const fileName = handlerName.substring(0, index);
@@ -82,10 +98,16 @@ async function init(): Promise<[EffectHandler<any, never, never, any>, Layer.Lay
   const filePath = `${env("LAMBDA_TASK_ROOT")}/${fileName}.js`;
   let file;
   try {
-    file = await import(filePath);
+    file = require(filePath);
   } catch (cause) {
-    if (cause instanceof Error && cause.message.startsWith("Cannot find module")) {
-      return throwError("FileDoesNotExist", `Did not find a file named '${fileName}.js'`);
+    if (
+      cause instanceof Error &&
+      cause.message.startsWith("Cannot find module")
+    ) {
+      return throwError(
+        "FileDoesNotExist",
+        `Did not find a file named '${filePath}'`
+      );
     }
     return throwError("InitError", cause);
   }
@@ -95,7 +117,7 @@ async function init(): Promise<[EffectHandler<any, never, never, any>, Layer.Lay
   if (typeof handler !== "function") {
     return throwError(
       handler === undefined ? "HandlerDoesNotExist" : "HandlerIsNotAFunction",
-      `${fileName} does not have an exported function named 'handler'`,
+      `${fileName} does not have an exported function named 'handler'`
     );
   }
   return [handler, layer];
@@ -111,7 +133,8 @@ type LambdaRequest<E = any> = {
 
 async function receiveRequest(): Promise<LambdaRequest> {
   const response = await fetch("runtime/invocation/next");
-  requestId = response.headers.get("Lambda-Runtime-Aws-Request-Id") ?? undefined;
+  requestId =
+    response.headers.get("Lambda-Runtime-Aws-Request-Id") ?? undefined;
   if (requestId === undefined) {
     exit("Runtime received a request without a request ID");
   }
@@ -120,11 +143,13 @@ async function receiveRequest(): Promise<LambdaRequest> {
     exit("Runtime received a request without a trace ID");
   }
   process.env["_X_AMZN_TRACE_ID"] = traceId;
-  functionArn = response.headers.get("Lambda-Runtime-Invoked-Function-Arn") ?? undefined;
+  functionArn =
+    response.headers.get("Lambda-Runtime-Invoked-Function-Arn") ?? undefined;
   if (functionArn === undefined) {
     exit("Runtime received a request without a function ARN");
   }
-  const deadlineMs = parseInt(response.headers.get("Lambda-Runtime-Deadline-Ms") ?? "0") || null;
+  const deadlineMs =
+    parseInt(response.headers.get("Lambda-Runtime-Deadline-Ms") ?? "0") || null;
   let event;
   try {
     event = await response.json();
@@ -153,8 +178,12 @@ async function formatResponse(response: Response): Promise<LambdaResponse> {
   const statusCode = response.status;
   const headers = response.headers as unknown as Record<string, string>; // .toJSON();
   const mime = headers["content-type"];
-  const isBase64Encoded = !mime || (!mime.startsWith("text/") && !mime.startsWith("application/json"));
-  const body = isBase64Encoded ? Buffer.from(await response.arrayBuffer()).toString("base64") : await response.text();
+  const isBase64Encoded =
+    !mime ||
+    (!mime.startsWith("text/") && !mime.startsWith("application/json"));
+  const body = isBase64Encoded
+    ? Buffer.from(await response.arrayBuffer()).toString("base64")
+    : await response.text();
   // delete headers["set-cookie"];
   // const cookies = response.headers.getAll("Set-Cookie");
   // if (cookies.length === 0) {
@@ -183,7 +212,12 @@ async function sendResponse(response: unknown): Promise<void> {
   }
   await fetch(`runtime/invocation/${requestId}/response`, {
     method: "POST",
-    body: response === null ? null : typeof response === "string" ? response : JSON.stringify(response),
+    body:
+      response === null
+        ? null
+        : typeof response === "string"
+        ? response
+        : JSON.stringify(response),
   });
 }
 
@@ -196,7 +230,10 @@ class LambdaServer {
   hostname: string;
   development: boolean;
 
-  constructor(lambda: EffectHandler<any, never, never, any>, layer?: Layer.Layer<unknown, unknown>) {
+  constructor(
+    lambda: EffectHandler<any, never, never, any>,
+    layer?: Layer.Layer<unknown, unknown>
+  ) {
     this.#lambda = lambda;
     this.#layer = layer;
     this.pendingRequests = 0;
@@ -207,12 +244,15 @@ class LambdaServer {
   }
 
   async accept(request: LambdaRequest): Promise<unknown> {
-    const deadlineMs = request.deadlineMs === null ? Date.now() + 60_000 : request.deadlineMs;
+    const deadlineMs =
+      request.deadlineMs === null ? Date.now() + 60_000 : request.deadlineMs;
     const durationMs = Math.max(1, deadlineMs - Date.now());
     let response: unknown;
     try {
       response = await Promise.race([
-        new Promise<undefined>((resolve) => setTimeout(resolve, durationMs)),
+        new Promise<undefined>((resolve) =>
+          setTimeout(() => resolve(undefined), durationMs)
+        ),
         this.#acceptRequest(request),
       ]);
     } catch (cause) {
@@ -243,9 +283,10 @@ class LambdaServer {
   async fetch({ event, ...context }: LambdaRequest): Promise<any> {
     this.pendingRequests++;
     try {
-      const handler = this.#layer !== undefined
-        ? makeLambda(this.#lambda.bind(this), this.#layer)
-        : makeLambda(this.#lambda.bind(this));
+      const handler =
+        this.#layer !== undefined
+          ? makeLambda(this.#lambda.bind(this), this.#layer)
+          : makeLambda(this.#lambda.bind(this));
       const response = await handler(event, context as any);
       // if (response instanceof Response) {
       //   return response;
@@ -260,16 +301,20 @@ class LambdaServer {
   }
 }
 
-const [lambda, layer] = await init();
-const server = new LambdaServer(lambda, layer);
-while (true) {
-  try {
-    const request = await receiveRequest();
-    const response = await server.accept(request);
-    if (response !== undefined) {
-      await sendResponse(response);
+async function main() {
+  const [lambda, layer] = await init();
+  const server = new LambdaServer(lambda, layer);
+  while (true) {
+    try {
+      const request = await receiveRequest();
+      const response = await server.accept(request);
+      if (response !== undefined) {
+        await sendResponse(response);
+      }
+    } finally {
+      reset();
     }
-  } finally {
-    reset();
   }
 }
+
+main();

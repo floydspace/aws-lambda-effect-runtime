@@ -5,7 +5,7 @@ The idea is to have an option to implement lambda functions returning `Effect` t
 
 ## Setup
 
-First, you will need to deploy the layer to your AWS account. Clone this repository and run the publish-layer script to get started. Note: the publish-layer script also builds the layer.
+First, you will need to deploy the layer to your AWS account. Clone this repository and run the `build-layer` script to prepare the layer for distribution. Then run the `publish-layer` script to publish the layer to your AWS account.
 
 ```sh
 git clone https://github.com/floydspace/aws-lambda-effect-runtime.git
@@ -47,7 +47,7 @@ Once you've written your Lambda function, you need to configure a new Lambda fun
 
 1. Create the Lambda function
 2. Set the Runtime to custom with Amazon Linux 2023
-3. Set the handler to <handler-file-name>.<handler-function-name> (e.g. `src/handler.effectHandler`)
+3. Set the handler to `<handler-file-name>.<handler-function-name>` (e.g. `src/handler.effectHandler`)
 4. Set the architecture to whichever architecture you configured when you built/deployed the Lambda Layer
 5. Attach the Lambda Layer to your new function
 6. Upload the zip file from step 2. You can do this in the console directly, upload to S3 and set that as the location for the handler file in Lambda, or use something like CDK to manage this for you.

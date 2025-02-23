@@ -21,6 +21,7 @@ tar -xf "$TEMP_DIR/$NODE_TAR" -C $TEMP_DIR
 echo "Copying $NODE_DIST/bin/node to dist/..."
 mkdir -p dist/$NODE_DIST/bin
 cp "$TEMP_DIR/$NODE_DIST/bin/node" dist/$NODE_DIST/bin/node
+cp -r node_modules dist/
 cp build/runtime.js dist/
 cp bootstrap dist/
 

@@ -7,8 +7,6 @@ LAYER_ARCH="x86_64"
 LAYER_ZIP="aws-lambda-effect-runtime.zip"    
 REGION="eu-west-1"
 
-sh "$(dirname "$0")/build-layer.sh"
-
 # Publish the layer
 echo "Publishing $LAYER_NAME..."
 aws lambda publish-layer-version \
