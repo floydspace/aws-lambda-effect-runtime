@@ -99,15 +99,10 @@ const sendResponse = (response: unknown) =>
 
 class LambdaServer {
   #lambda: EffectHandler<any, never, never, any>;
-  #layer: Layer.Layer<unknown, unknown> | null;
   pendingRequests: number;
 
-  constructor(
-    lambda: EffectHandler<any, never, never, any>,
-    layer: Layer.Layer<unknown, unknown> | null
-  ) {
+  constructor(lambda: EffectHandler<any, never, never, any>) {
     this.#lambda = lambda;
-    this.#layer = layer;
     this.pendingRequests = 0;
   }
 
@@ -146,9 +141,6 @@ class LambdaServer {
 
   fetch({ event, ...context }: LambdaRequest) {
     return this.#lambda(event, context as any).pipe(
-      Effect.provide(
-        (this.#layer as unknown as Layer.Layer<never>) ?? Layer.empty
-      ),
       Effect.catchAllDefect((cause) => {
         console.error(cause);
         return Effect.succeed({ status: 500 });
@@ -167,7 +159,7 @@ const program = Effect.gen(function* () {
   const lambda = yield* getExportedHandler(file, functionName);
   const layer = yield* getExportedLayer(file, GLOBAL_LAYER_EXPORT_NAME);
 
-  const server = new LambdaServer(lambda, layer);
+  const server = new LambdaServer(lambda);
 
   return yield* receiveRequestScoped.pipe(
     Effect.andThen((request) => server.accept(request)),
@@ -175,7 +167,8 @@ const program = Effect.gen(function* () {
       response !== undefined ? sendResponse(response) : Effect.void
     ),
     Effect.scoped,
-    Effect.forever
+    Effect.forever,
+    Effect.provide((layer as unknown as Layer.Layer<never>) ?? Layer.empty)
   );
 }).pipe(
   Effect.catchTag("ConfigError", (cause) =>
