@@ -1,6 +1,14 @@
 import type { EffectHandler } from "@effect-aws/lambda";
 import { HttpClientError } from "@effect/platform";
-import { Cause, Config, Console, Effect, Layer } from "effect";
+import {
+  Cause,
+  Config,
+  Console,
+  Effect,
+  Layer,
+  ManagedRuntime,
+  Option,
+} from "effect";
 import {
   getExportedHandler,
   getExportedLayer,
@@ -127,10 +135,10 @@ class LambdaServer {
   }
 
   #acceptRequest(
-    event: LambdaRequest
+    request: LambdaRequest
   ): Effect.Effect<LambdaResponse, Cause.UnknownException> {
-    return Effect.fromNullable(event).pipe(
-      Effect.andThen((e) => this.fetch(e)),
+    return Effect.fromNullable(request).pipe(
+      Effect.andThen((e) => this.handleLambda(e)),
       Effect.andThen(Effect.fromNullable),
       Effect.andThen(formatResponse),
       Effect.catchTag("NoSuchElementException", () =>
@@ -139,7 +147,7 @@ class LambdaServer {
     );
   }
 
-  fetch({ event, ...context }: LambdaRequest) {
+  handleLambda({ event, ...context }: LambdaRequest) {
     return this.#lambda(event, context as any).pipe(
       Effect.catchAllDefect((cause) => {
         console.error(cause);
@@ -149,27 +157,49 @@ class LambdaServer {
   }
 }
 
-const program = Effect.gen(function* () {
+function fromLayer<R, E>(layer: Layer.Layer<R, E>) {
+  const rt = ManagedRuntime.make(layer);
+
+  const signalHandler: NodeJS.SignalsListener = (signal) => {
+    Effect.runFork(
+      Effect.gen(function* () {
+        yield* Console.log(`[runtime] ${signal} received`);
+        yield* Console.log("[runtime] cleaning up");
+        yield* rt.disposeEffect;
+        yield* Console.log("[runtime] exiting");
+        yield* Effect.sync(() => process.exit(0));
+      })
+    );
+  };
+
+  process.on("SIGTERM", signalHandler);
+  process.on("SIGINT", signalHandler);
+
+  return rt;
+}
+
+const [lambda, GlobalRuntime] = Effect.gen(function* () {
+  yield* Effect.logInfo("Loading handler...");
   const handlerName = yield* Config.nonEmptyString("_HANDLER");
-  const rootPath = yield* Config.nonEmptyString("LAMBDA_TASK_ROOT");
+  yield* Effect.annotateLogsScoped({ handlerName });
+
+  const taskRoot = yield* Config.nonEmptyString("LAMBDA_TASK_ROOT");
+  yield* Effect.annotateLogsScoped({ rootPath: taskRoot });
+
   const index = handlerName.lastIndexOf(".");
   const fileName = handlerName.substring(0, index);
   const functionName = handlerName.substring(index + 1);
-  const file = yield* importHandler(`${rootPath}/${fileName}.js`);
-  const lambda = yield* getExportedHandler(file, functionName);
-  const layer = yield* getExportedLayer(file, GLOBAL_LAYER_EXPORT_NAME);
 
-  const server = new LambdaServer(lambda);
+  const file = yield* importHandler(`${taskRoot}/${fileName}.js`);
+  const handler = yield* getExportedHandler(file, functionName);
+  const maybeLayer = yield* getExportedLayer(file, GLOBAL_LAYER_EXPORT_NAME);
 
-  return yield* receiveRequestScoped.pipe(
-    Effect.andThen((request) => server.accept(request)),
-    Effect.andThen((response) =>
-      response !== undefined ? sendResponse(response) : Effect.void
-    ),
-    Effect.scoped,
-    Effect.forever,
-    Effect.provide((layer as unknown as Layer.Layer<never>) ?? Layer.empty)
-  );
+  yield* Effect.logInfo("Handler loaded successfully");
+
+  return [
+    handler,
+    fromLayer(Option.getOrElse(maybeLayer, () => Layer.empty)),
+  ] as const;
 }).pipe(
   Effect.catchTag("ConfigError", (cause) =>
     Effect.dieMessage(
@@ -178,8 +208,26 @@ const program = Effect.gen(function* () {
       }' environment variable`
     )
   ),
+  Effect.scoped,
+  Effect.runSync
+);
+
+const program = Effect.gen(function* () {
+  yield* Effect.logInfo("Starting runtime...");
+
+  const server = new LambdaServer(lambda);
+
+  yield* receiveRequestScoped.pipe(
+    Effect.andThen((request) => server.accept(request)),
+    Effect.andThen((response) =>
+      response !== undefined ? sendResponse(response) : Effect.void
+    ),
+    Effect.scoped,
+    Effect.forever
+  );
+}).pipe(
   Effect.catchAll((cause) => sendError(cause._tag, cause.cause)),
   Effect.provide(RuntimeApiService.Default)
 );
 
-Effect.runFork(program);
+GlobalRuntime.runFork(program);

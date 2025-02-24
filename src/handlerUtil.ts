@@ -1,5 +1,5 @@
-import { type EffectHandler, makeLambda } from "@effect-aws/lambda";
-import { Config, Effect, Function, Layer } from "effect";
+import type { EffectHandler } from "@effect-aws/lambda";
+import { Effect, Function, Layer, Option } from "effect";
 import {
   FileDoesNotExist,
   HandlerDoesNotExist,
@@ -45,17 +45,15 @@ export const getExportedHandler = (file: any, variableName: string) =>
     return handler as EffectHandler<any, never, never, any>;
   });
 
-export const getExportedLayer = (file: any, variableName: string) =>
-  Effect.gen(function* () {
-    const layer: unknown = file[variableName];
-
-    if (layer == undefined) {
-      return null;
-    }
-
-    if (!Layer.isLayer(layer)) {
-      return yield* new ObjectIsNotALayer();
-    }
-
-    return layer as Layer.Layer<unknown, unknown>;
-  });
+export const getExportedLayer = (
+  file: any,
+  variableName: string
+): Effect.Effect<Option.Option<Layer.Layer<unknown>>, ObjectIsNotALayer> =>
+  Effect.fromNullable(file[variableName]).pipe(
+    Effect.flatMap((layer) =>
+      Layer.isLayer(layer)
+        ? Effect.succeedSome(layer as Layer.Layer<unknown>)
+        : new ObjectIsNotALayer()
+    ),
+    Effect.catchTag("NoSuchElementException", () => Effect.succeedNone)
+  );

@@ -22,8 +22,14 @@ echo "Copying $NODE_DIST/bin/node to dist/..."
 mkdir -p dist/$NODE_DIST/bin
 cp "$TEMP_DIR/$NODE_DIST/bin/node" dist/$NODE_DIST/bin/node
 cp -r node_modules dist/
+
+# Copy runtime files
 cp build/runtime.js dist/
 cp bootstrap dist/
+
+# Copy extension files
+cp build/extension.js dist/
+cp -r extensions dist/
 
 # Create a zip archive of the dist/ directory
 echo "Creating $OUTPUT_ZIP archive..."

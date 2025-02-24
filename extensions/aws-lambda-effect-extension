@@ -1,0 +1,10 @@
+#! /bin/bash
+
+set -euo pipefail
+
+OWN_FILENAME="$(basename $0)"
+LAMBDA_EXTENSION_NAME="$OWN_FILENAME" # (external) extension name has to match the filename
+
+echo "[$LAMBDA_EXTENSION_NAME] launching extension"
+
+exec /opt/node-v22.14.0-linux-x64/bin/node /opt/extension.js

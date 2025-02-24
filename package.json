@@ -15,7 +15,7 @@
     "typescript": "^5.7.3"
   },
   "scripts": {
-    "compile": "esbuild --bundle --platform=node --target=node22 --external:effect --external:@effect/platform --outdir=build src/runtime.ts",
+    "compile": "sh scripts/compile.sh",
     "build-layer": "rm -rf dist && pnpm compile && pnpm install --prod && sh scripts/build-layer.sh && pnpm install",
     "publish-layer": "sh scripts/publish-layer.sh"
   },

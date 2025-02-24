@@ -1,9 +1,9 @@
 import {
   FetchHttpClient,
+  Headers,
   HttpBody,
   HttpClient,
   HttpClientRequest,
-  Headers,
 } from "@effect/platform";
 import { Config, Effect, Option } from "effect";
 

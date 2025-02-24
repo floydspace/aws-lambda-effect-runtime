@@ -1,4 +1,9 @@
 #! /bin/sh
 
+set -euo pipefail
+
 export NODE_PATH=/opt/node_modules
+
+echo "[aws-lambda-effect-runtime] launching runtime"
+
 exec /opt/node-v22.14.0-linux-x64/bin/node /opt/runtime.js
