@@ -5,6 +5,7 @@ pnpm esbuild src/runtime.ts --bundle \
   --target=node22 \
   --external:effect \
   --external:@effect/platform \
+  --external:@effect-aws/lambda \
   --outdir=build
 
 pnpm esbuild src/extension.ts --bundle \

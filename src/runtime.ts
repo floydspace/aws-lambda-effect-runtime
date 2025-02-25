@@ -1,12 +1,12 @@
-import type { EffectHandler } from "@effect-aws/lambda";
+import { fromLayer, type EffectHandler } from "@effect-aws/lambda";
 import { HttpClientError } from "@effect/platform";
 import {
   Cause,
   Config,
   Console,
   Effect,
+  Function,
   Layer,
-  ManagedRuntime,
   Option,
 } from "effect";
 import {
@@ -157,27 +157,6 @@ class LambdaServer {
   }
 }
 
-function fromLayer<R, E>(layer: Layer.Layer<R, E>) {
-  const rt = ManagedRuntime.make(layer);
-
-  const signalHandler: NodeJS.SignalsListener = (signal) => {
-    Effect.runFork(
-      Effect.gen(function* () {
-        yield* Console.log(`[runtime] ${signal} received`);
-        yield* Console.log("[runtime] cleaning up");
-        yield* rt.disposeEffect;
-        yield* Console.log("[runtime] exiting");
-        yield* Effect.sync(() => process.exit(0));
-      })
-    );
-  };
-
-  process.on("SIGTERM", signalHandler);
-  process.on("SIGINT", signalHandler);
-
-  return rt;
-}
-
 const [lambda, GlobalRuntime] = Effect.gen(function* () {
   yield* Effect.logInfo("Loading handler...");
   const handlerName = yield* Config.nonEmptyString("_HANDLER");
@@ -191,15 +170,20 @@ const [lambda, GlobalRuntime] = Effect.gen(function* () {
   const functionName = handlerName.substring(index + 1);
 
   const file = yield* importHandler(`${taskRoot}/${fileName}.js`);
-  const handler = yield* getExportedHandler(file, functionName);
+  const handlerOrOptions = yield* getExportedHandler(file, functionName);
+  const handler = Function.isFunction(handlerOrOptions)
+    ? handlerOrOptions
+    : handlerOrOptions.handler;
   const maybeLayer = yield* getExportedLayer(file, GLOBAL_LAYER_EXPORT_NAME);
+  const globalLayer = Option.isSome(maybeLayer)
+    ? maybeLayer.value
+    : !Function.isFunction(handlerOrOptions)
+    ? handlerOrOptions.layer
+    : Layer.empty;
 
   yield* Effect.logInfo("Handler loaded successfully");
 
-  return [
-    handler,
-    fromLayer(Option.getOrElse(maybeLayer, () => Layer.empty)),
-  ] as const;
+  return [handler, fromLayer(globalLayer)] as const;
 }).pipe(
   Effect.catchTag("ConfigError", (cause) =>
     Effect.dieMessage(

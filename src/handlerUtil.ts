@@ -1,4 +1,4 @@
-import type { EffectHandler } from "@effect-aws/lambda";
+import type { EffectHandler, EffectHandlerWithLayer } from "@effect-aws/lambda";
 import { Effect, Function, Layer, Option } from "effect";
 import {
   FileDoesNotExist,
@@ -36,13 +36,17 @@ export const getExportedHandler = (file: any, variableName: string) =>
       });
     }
 
-    if (!Function.isFunction(handler)) {
-      return yield* new HandlerIsNotAFunction({
-        message: `Exported variable '${variableName}' is not a function`,
-      });
+    if (Function.isFunction(handler)) {
+      return handler as EffectHandler<any, never, never, any>;
     }
 
-    return handler as EffectHandler<any, never, never, any>;
+    if (Function.isFunction(handler.handler) && Layer.isLayer(handler.layer)) {
+      return handler as EffectHandlerWithLayer<any, never, never, never, any>;
+    }
+
+    return yield* new HandlerIsNotAFunction({
+      message: `Exported variable '${variableName}' is not a function`,
+    });
   });
 
 export const getExportedLayer = (

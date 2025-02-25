@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@effect-aws/lambda':
+        specifier: ^1.3.1
+        version: 1.3.1(effect@3.12.12)
       '@effect/platform':
         specifier: ^0.76.1
         version: 0.76.1(effect@3.12.12)
@@ -15,9 +18,6 @@ importers:
         specifier: ^3.12.12
         version: 3.12.12
     devDependencies:
-      '@effect-aws/lambda':
-        specifier: ^1.2.1
-        version: 1.2.1(effect@3.12.12)
       '@types/aws-lambda':
         specifier: ^8.10.147
         version: 8.10.147
@@ -33,8 +33,8 @@ importers:
 
 packages:
 
-  '@effect-aws/lambda@1.2.1':
-    resolution: {integrity: sha512-cQol5OhJlcU3oJSP0gNS2QYRI6rv9tOw7X08EUId8zQB3w2DogGG5koYbk23QyaC9GgF1G/2g1t1VyIrifmfZw==}
+  '@effect-aws/lambda@1.3.1':
+    resolution: {integrity: sha512-fFVIY7YvU5xCo6ewAZAHJWkBjf3HC75GGbwkcFT7KGwQ8By+a3DJGrJT60QvoAAZUIjbpwCdCjeGA9kuFbGeVA==}
     peerDependencies:
       effect: '>=3.0.4 <4.0.0'
 
@@ -230,7 +230,7 @@ packages:
 
 snapshots:
 
-  '@effect-aws/lambda@1.2.1(effect@3.12.12)':
+  '@effect-aws/lambda@1.3.1(effect@3.12.12)':
     dependencies:
       effect: 3.12.12
 
