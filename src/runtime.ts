@@ -1,26 +1,12 @@
 import { fromLayer, type EffectHandler } from "@effect-aws/lambda";
-import { HttpClientError } from "@effect/platform";
-import {
-  Cause,
-  Config,
-  Console,
-  Effect,
-  Function,
-  Layer,
-  Option,
-} from "effect";
-import {
-  getExportedHandler,
-  getExportedLayer,
-  importHandler,
-} from "./handlerUtil";
+import type { HttpClientError } from "@effect/platform";
+import { Cause, Console, Effect } from "effect";
+import { loadHandlerWithLayer } from "./handlerUtil";
 import { LambdaRequest, RuntimeApiService } from "./runtimeApi";
 
 let requestId: string | undefined;
 let traceId: string | undefined;
 let functionArn: string | undefined;
-
-const GLOBAL_LAYER_EXPORT_NAME = "globalLayer";
 
 function reset(): void {
   requestId = undefined;
@@ -157,34 +143,8 @@ class LambdaServer {
   }
 }
 
-const [lambda, GlobalRuntime] = Effect.gen(function* () {
-  yield* Effect.logInfo("Loading handler...");
-  const handlerName = yield* Config.nonEmptyString("_HANDLER");
-  yield* Effect.annotateLogsScoped({ handlerName });
-
-  const taskRoot = yield* Config.nonEmptyString("LAMBDA_TASK_ROOT");
-  yield* Effect.annotateLogsScoped({ rootPath: taskRoot });
-
-  const index = handlerName.lastIndexOf(".");
-  const fileName = handlerName.substring(0, index);
-  const functionName = handlerName.substring(index + 1);
-
-  const file = yield* importHandler(`${taskRoot}/${fileName}.js`);
-  const handlerOrOptions = yield* getExportedHandler(file, functionName);
-  const handler = Function.isFunction(handlerOrOptions)
-    ? handlerOrOptions
-    : handlerOrOptions.handler;
-  const maybeLayer = yield* getExportedLayer(file, GLOBAL_LAYER_EXPORT_NAME);
-  const globalLayer = Option.isSome(maybeLayer)
-    ? maybeLayer.value
-    : !Function.isFunction(handlerOrOptions)
-    ? handlerOrOptions.layer
-    : Layer.empty;
-
-  yield* Effect.logInfo("Handler loaded successfully");
-
-  return [handler, fromLayer(globalLayer)] as const;
-}).pipe(
+const [lambda, GlobalRuntime] = loadHandlerWithLayer.pipe(
+  Effect.map(({ handler, layer }) => [handler, fromLayer(layer)] as const),
   Effect.catchTag("ConfigError", (cause) =>
     Effect.dieMessage(
       `Runtime failed to find the '${
@@ -192,7 +152,6 @@ const [lambda, GlobalRuntime] = Effect.gen(function* () {
       }' environment variable`
     )
   ),
-  Effect.scoped,
   Effect.runSync
 );
 

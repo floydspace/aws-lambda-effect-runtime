@@ -1,6 +1,5 @@
 import {
   FetchHttpClient,
-  Headers,
   HttpBody,
   HttpClient,
   HttpClientRequest,
@@ -19,23 +18,21 @@ export const ExtensionApi = Effect.gen(function* () {
     ),
     HttpClient.transformResponse((response) =>
       response.pipe(
-        Effect.flatMap((res) =>
-          200 <= res.status && res.status < 300
-            ? Effect.succeed(res)
-            : res.text.pipe(
-                Effect.flatMap((error) =>
-                  Effect.dieMessage(`register failed [error: ${error}]`)
-                )
-              )
+        Effect.tapErrorTag("ResponseError", (error) =>
+          error.response.text.pipe(
+            Effect.tap((text) => Effect.annotateLogsScoped({ text })),
+            Effect.tap(() =>
+              Effect.logError(`[Extension API] ${error.message}`)
+            )
+          )
         )
       )
     )
   );
 });
 
-export interface RegisterRequest {
-  events: string[];
-}
+export const ExtensionId = Schema.String.pipe(Schema.brand("ExtensionId"));
+export type ExtensionId = typeof ExtensionId.Type;
 
 export class ExtensionApiService extends Effect.Service<ExtensionApiService>()(
   "aws-lambda-effect-extension/ExtensionApiService",
@@ -44,7 +41,7 @@ export class ExtensionApiService extends Effect.Service<ExtensionApiService>()(
       const client = yield* ExtensionApi;
 
       return {
-        register: (request: RegisterRequest) =>
+        register: (request: { readonly events: string[] }) =>
           client
             .post("register", {
               headers: {
@@ -53,12 +50,15 @@ export class ExtensionApiService extends Effect.Service<ExtensionApiService>()(
               body: HttpBody.unsafeJson(request),
             })
             .pipe(
-              Effect.flatMap((res) =>
-                Headers.get(res.headers, "Lambda-Extension-Identifier")
+              Effect.flatMap(
+                HttpClientResponse.schemaHeaders(
+                  Schema.Struct({ "lambda-extension-identifier": ExtensionId })
+                )
               ),
+              Effect.map((res) => res["lambda-extension-identifier"]),
               Effect.scoped
             ),
-        nextEvent: (extensionId: string) =>
+        nextEvent: (extensionId: ExtensionId) =>
           client
             .get("event/next", {
               headers: {

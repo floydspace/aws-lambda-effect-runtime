@@ -1,5 +1,5 @@
 import type { EffectHandler, EffectHandlerWithLayer } from "@effect-aws/lambda";
-import { Effect, Function, Layer, Option } from "effect";
+import { Config, Effect, Function, Layer, Option } from "effect";
 import {
   FileDoesNotExist,
   HandlerDoesNotExist,
@@ -7,6 +7,8 @@ import {
   InitError,
   ObjectIsNotALayer,
 } from "./errors";
+
+const GLOBAL_LAYER_EXPORT_NAME = "globalLayer";
 
 export const importHandler = (
   filePath: string
@@ -61,3 +63,32 @@ export const getExportedLayer = (
     ),
     Effect.catchTag("NoSuchElementException", () => Effect.succeedNone)
   );
+
+export const loadHandlerWithLayer = Effect.gen(function* () {
+  yield* Effect.logInfo("Loading handler...");
+  const handlerName = yield* Config.nonEmptyString("_HANDLER");
+  yield* Effect.annotateLogsScoped({ handlerName });
+
+  const taskRoot = yield* Config.nonEmptyString("LAMBDA_TASK_ROOT");
+  yield* Effect.annotateLogsScoped({ rootPath: taskRoot });
+
+  const index = handlerName.lastIndexOf(".");
+  const fileName = handlerName.substring(0, index);
+  const functionName = handlerName.substring(index + 1);
+
+  const file = yield* importHandler(`${taskRoot}/${fileName}.js`);
+  const handlerOrOptions = yield* getExportedHandler(file, functionName);
+  const handler = Function.isFunction(handlerOrOptions)
+    ? handlerOrOptions
+    : handlerOrOptions.handler;
+  const maybeLayer = yield* getExportedLayer(file, GLOBAL_LAYER_EXPORT_NAME);
+  const layer = Option.isSome(maybeLayer)
+    ? maybeLayer.value
+    : !Function.isFunction(handlerOrOptions)
+    ? handlerOrOptions.layer
+    : Layer.empty;
+
+  yield* Effect.logInfo("Handler loaded successfully");
+
+  return { handler, layer } as EffectHandlerWithLayer<any, never>;
+}).pipe(Effect.scoped);
