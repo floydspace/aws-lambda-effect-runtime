@@ -51,6 +51,8 @@ export const handler: EffectHandlerWithLayer<SNSEvent, never> = {
 };
 ```
 
+The global layer will be constructed on lambda cold-start and finalized on shutdown. (How cool is that, huh!)
+
 ### Step 2: Build the handler
 
 You can transpile your handler function to JavaScript or bundle it. Here's how you can do it using `esbuild`:
