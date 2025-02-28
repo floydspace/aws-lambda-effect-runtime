@@ -30,16 +30,35 @@ import type { EffectHandler } from "@effect-aws/lambda"
 // Define your effect handler
 export const handler: EffectHandler<SNSEvent, never> = (event, context) => {
   // Your effect logic here
-  return Effect.succeed("Hello, World!")
+  return Effect.logInfo("Hello, World!")
 }
+```
+
+or with global layer:
+
+```typescript
+import type { SNSEvent } from "aws-lambda"
+import { Effect, Logger } from "effect"
+import type { EffectHandlerWithLayer } from "@effect-aws/lambda"
+
+// Define your effect handler with global layer
+export const handler: EffectHandlerWithLayer<SNSEvent, never> = {
+  handler: (event, context) => {
+    // Your effect logic here
+    return Effect.logInfo("Hello, World!")
+  },
+  layer: Logger.pretty,
+};
 ```
 
 ### Step 2: Build the handler
 
 You can transpile your handler function to JavaScript or bundle it. Here's how you can do it using `esbuild`:
 
-1. Run `esbuild src/handler.ts --bundle --platform=node --target=node22 --outfile=dist/handler.js`
+1. Run `esbuild src/handler.ts --bundle --platform=node --target=node22 --external:@effect/platform --external:effect --outfile=dist/handler.js`
 2. Zip the `/dist` folder
+
+_Note_: Make sure you exclude `effect` and `@effect/platform` from the bundle. Those dependencies are provided by the layer.
 
 ### Step 3: Create the Lambda function on AWS
 
