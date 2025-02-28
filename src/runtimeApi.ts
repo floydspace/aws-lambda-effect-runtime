@@ -2,10 +2,11 @@ import {
   FetchHttpClient,
   HttpBody,
   HttpClient,
+  HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
 } from "@effect/platform";
-import { Config, Effect, Schema } from "effect";
+import { Config, Effect, ParseResult, Schema } from "effect";
 
 export const RuntimeApi = Effect.gen(function* () {
   const baseUrl = yield* Config.nonEmptyString("AWS_LAMBDA_RUNTIME_API");
@@ -29,6 +30,20 @@ export const RuntimeApi = Effect.gen(function* () {
   );
 });
 
+export const RequestId = Schema.String.pipe(Schema.brand("RequestId"));
+export type RequestId = typeof RequestId.Type;
+
+export const TraceId = Schema.String.pipe(Schema.brand("TraceId"));
+export type TraceId = typeof TraceId.Type;
+
+export type LambdaRequest<E = any> = {
+  readonly requestId: RequestId;
+  readonly traceId: TraceId;
+  readonly functionArn: string;
+  readonly deadlineMs: number | null;
+  readonly event: E;
+};
+
 export class RuntimeApiService extends Effect.Service<RuntimeApiService>()(
   "aws-lambda-effect-runtime/RuntimeApiService",
   {
@@ -46,25 +61,18 @@ export class RuntimeApiService extends Effect.Service<RuntimeApiService>()(
               body: HttpBody.unsafeJson(formatError(cause)),
             })
             .pipe(Effect.scoped),
-        invocationError: (requestId: string, type: string, cause: unknown) =>
-          client
-            .post(`invocation/${requestId}/error`, {
-              headers: {
-                "Content-Type": "application/vnd.aws.lambda.error+json",
-                "Lambda-Runtime-Function-Error-Type": `EffectRuntime.${type}`,
-              },
-              body: HttpBody.unsafeJson(formatError(cause)),
-            })
-            .pipe(Effect.scoped),
-        nextInvocation: () =>
+        nextInvocation: (): Effect.Effect<
+          LambdaRequest,
+          HttpClientError.HttpClientError | ParseResult.ParseError
+        > =>
           client.get("invocation/next").pipe(
             Effect.flatMap(
               HttpClientResponse.schemaJson(
                 Schema.Struct({
                   body: Schema.Any,
                   headers: Schema.Struct({
-                    "lambda-runtime-aws-request-id": Schema.String,
-                    "lambda-runtime-trace-id": Schema.String,
+                    "lambda-runtime-aws-request-id": RequestId,
+                    "lambda-runtime-trace-id": TraceId,
                     "lambda-runtime-invoked-function-arn": Schema.String,
                     "lambda-runtime-deadline-ms": Schema.optional(
                       Schema.NumberFromString
@@ -73,19 +81,16 @@ export class RuntimeApiService extends Effect.Service<RuntimeApiService>()(
                 })
               )
             ),
-            Effect.map(
-              ({ body, headers }) =>
-                ({
-                  requestId: headers["lambda-runtime-aws-request-id"],
-                  traceId: headers["lambda-runtime-trace-id"],
-                  functionArn: headers["lambda-runtime-invoked-function-arn"],
-                  deadlineMs: headers["lambda-runtime-deadline-ms"],
-                  event: body,
-                } as LambdaRequest)
-            ),
+            Effect.map(({ body, headers }) => ({
+              requestId: headers["lambda-runtime-aws-request-id"],
+              traceId: headers["lambda-runtime-trace-id"],
+              functionArn: headers["lambda-runtime-invoked-function-arn"],
+              deadlineMs: headers["lambda-runtime-deadline-ms"],
+              event: body,
+            })),
             Effect.scoped
           ),
-        invocationResponse: (requestId: string, response: unknown) =>
+        invocationResponse: (requestId: RequestId, response: unknown) =>
           client
             .post(`invocation/${requestId}/response`, {
               body:
@@ -96,20 +101,22 @@ export class RuntimeApiService extends Effect.Service<RuntimeApiService>()(
                   : HttpBody.unsafeJson(response),
             })
             .pipe(Effect.scoped),
+        invocationError: (requestId: RequestId, type: string, cause: unknown) =>
+          client
+            .post(`invocation/${requestId}/error`, {
+              headers: {
+                "Content-Type": "application/vnd.aws.lambda.error+json",
+                "Lambda-Runtime-Function-Error-Type": `EffectRuntime.${type}`,
+              },
+              body: HttpBody.unsafeJson(formatError(cause)),
+            })
+            .pipe(Effect.scoped),
       };
     }),
     dependencies: [FetchHttpClient.layer],
     accessors: true,
   }
 ) {}
-
-export type LambdaRequest<E = any> = {
-  readonly requestId: string;
-  readonly traceId: string;
-  readonly functionArn: string;
-  readonly deadlineMs: number | null;
-  readonly event: E;
-};
 
 type LambdaError = {
   readonly errorType: string;
