@@ -66,6 +66,7 @@ export const getExportedLayer = (
 
 export const loadHandlerWithLayer = Effect.gen(function* () {
   yield* Effect.logInfo("Loading handler...");
+
   const handlerName = yield* Config.nonEmptyString("_HANDLER");
   yield* Effect.annotateLogsScoped({ handlerName });
 
@@ -78,17 +79,18 @@ export const loadHandlerWithLayer = Effect.gen(function* () {
 
   const file = yield* importHandler(`${taskRoot}/${fileName}.js`);
   const handlerOrOptions = yield* getExportedHandler(file, functionName);
-  const handler = Function.isFunction(handlerOrOptions)
-    ? handlerOrOptions
-    : handlerOrOptions.handler;
+
+  if (!Function.isFunction(handlerOrOptions)) {
+    return handlerOrOptions;
+  }
+
   const maybeLayer = yield* getExportedLayer(file, GLOBAL_LAYER_EXPORT_NAME);
-  const layer = Option.isSome(maybeLayer)
-    ? maybeLayer.value
-    : !Function.isFunction(handlerOrOptions)
-    ? handlerOrOptions.layer
-    : Layer.empty;
 
-  yield* Effect.logInfo("Handler loaded successfully");
-
-  return { handler, layer } as EffectHandlerWithLayer<any, never>;
-}).pipe(Effect.scoped);
+  return {
+    handler: handlerOrOptions,
+    layer: Option.isSome(maybeLayer) ? maybeLayer.value : Layer.empty,
+  } satisfies EffectHandlerWithLayer<any, never>;
+}).pipe(
+  Effect.tap(() => Effect.logInfo("Handler loaded successfully")),
+  Effect.scoped
+);
